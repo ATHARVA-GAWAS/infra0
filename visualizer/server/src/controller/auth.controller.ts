@@ -8,8 +8,10 @@ import {
   RefreshTokenRequest,
   RefreshTokenResponse,
   JWT_PAYLOAD_TYPE,
+  SessionResponse,
+  SessionStatusRequest,
 } from "../types/auth.types";
-import { getUserByContact, createUserItem } from "../services/user.service";
+import { createUserItem } from "../services/user.service";
 import { AppError } from "../errors/app-error";
 import httpStatus from "http-status";
 import { IUser } from "../model/user.model";
@@ -21,6 +23,11 @@ import {
 } from "../helpers/jwt";
 import { Status } from "../types/base";
 import { extractAuthToken } from "../helpers/jwt";
+import { authService } from "../services/auth.service";
+import * as sessionService from "../services/session.service";
+import { generateShortSessionId } from "../helpers/auth";
+import { SessionStatus } from "../model/session.model";
+
 
 const refreshToken = asyncHandler(
   async (
@@ -53,41 +60,41 @@ const refreshToken = asyncHandler(
   }
 );
 
+// New unified login that supports OAuth
 const login = asyncHandler(
   async (req: Request<{}, {}, LoginRequest>, res: Response<LoginResponse>) => {
-    const { contact, password } = req.body;
-    const user: IUser | null = await getUserByContact(contact);
-    if (!user) {
-      throw new AppError("User not found", httpStatus.NOT_FOUND);
-    }
-    // Here the user.password is hashed and password is not hashed
-    const isPasswordCorrect = await correctPassword(password, user.password);
-    if (!isPasswordCorrect) {
-      throw new AppError("Invalid password", httpStatus.UNAUTHORIZED);
-    }
+    const { provider, metaData } = req.body;
+    const sessionId = metaData?.sessionId;
+    try {
+      const user = await authService.authenticate(provider, metaData);
+      
+      // Generate both tokens
+      const tokens = await generateAuthTokens({ id: user.id });
+      if(sessionId) await sessionService.updateSession(sessionId, tokens);
 
-    // Generate both tokens
-    const tokens = await generateAuthTokens({ id: user.id });
-
-    res.status(httpStatus.OK).json({
-      status: Status.SUCCESS,
-      message: "Login successful",
-      data: {
-        user,
-        tokens
-      },
-    });
+      res.status(httpStatus.OK).json({
+        status: Status.SUCCESS,
+        message: "Login successful",
+        data: {
+          user,
+          tokens
+        },
+      });
+    } catch (error: any) {
+      throw new AppError(error.message, httpStatus.UNAUTHORIZED);
+    }
   }
 );
+
 
 const register = asyncHandler(
   async (
     req: Request<{}, {}, RegisterRequest>,
     res: Response<RegisterResponse>
   ) => {
-    const { contact, password, firstName, lastName } = req.body;
+    const { email, password, firstName, lastName } = req.body;
     const user: IUser = await createUserItem({
-      contact,
+      email,
       password,
       firstName,
       lastName,
@@ -128,4 +135,31 @@ const validateAccessToken = asyncHandler(async (req: Request, res: Response<bool
 
 });
 
-export { login, register, me, refreshToken, validateAccessToken };
+
+const createSession = asyncHandler(async (req: Request, res: Response<SessionResponse>) => {
+  const sessionId = generateShortSessionId();
+  const session = await sessionService.createSession(sessionId);
+  res.status(httpStatus.OK).json({
+    data: session,
+    status: Status.SUCCESS,
+    message: "Session created successfully"
+  });
+});
+
+const getSessionStatus = asyncHandler(async (req: Request<{}, {}, SessionStatusRequest>, res: Response<SessionResponse>) => {
+  const { sessionId } = req.body;
+  const session = await sessionService.getSession(sessionId);
+
+  if(session.status === SessionStatus.READY || session.tokens) {
+    await sessionService.deleteSession(sessionId);
+  }
+  
+  res.status(httpStatus.OK).json({
+    data: session,
+    status: Status.SUCCESS,
+    message: "Session status fetched successfully"
+  });
+});
+
+
+export { login, register, me, refreshToken, validateAccessToken, createSession, getSessionStatus };

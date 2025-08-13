@@ -7,13 +7,10 @@ x-shared-env: &shared-env
 services:
   infra0-visualizer-ui:
     <<: *shared-env
-    build:
-      context: .
-      dockerfile: ui.dockerfile
+    image: xshubhamx/infra0-visualizer-ui:${NODE_ENV:-development}
     ports:
       - 3000:3000
     container_name: infra0-visualizer-ui
-    image: xshubhamx/infra0-visualizer-ui:${NODE_ENV:-development}
     stop_signal: SIGINT
 
   mongo:
@@ -28,16 +25,21 @@ services:
 
   infra0-visualizer-server:
     <<: *shared-env
-    build:
-      context: .
-      dockerfile: server.dockerfile
+    image: xshubhamx/infra0-visualizer-server:${NODE_ENV:-development}
     ports:
       - 4000:4000
     container_name: infra0-visualizer-server
-    image: xshubhamx/infra0-visualizer-server:${NODE_ENV:-development}
     stop_signal: SIGINT
     depends_on:
       - mongo
+    environment:
+      - MONGO_DB_URI=mongodb://mongo:27017/visualizer
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
+      - JWT_ACCESS_EXPIRATION_MINUTES=${JWT_ACCESS_EXPIRATION_MINUTES:-15}
+      - JWT_REFRESH_EXPIRATION_DAYS=${JWT_REFRESH_EXPIRATION_DAYS:-7}
+      - JWT_SECRET=${JWT_SECRET:-infra0-jwt-secret-1945}
+      - PORT=4000
 
 volumes:
   infra0-mongo-data:

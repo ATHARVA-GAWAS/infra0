@@ -1,10 +1,20 @@
 import { BaseResponseWithData } from "./base";
 import { IUser } from "../model/user.model";
+import { ProviderType } from "../constants/auth";
+import { ISession } from "../model/session.model";
 
+
+export type OAuthMetaData = {
+  gIdToken?: string;
+  gAccessToken?: string;
+  email?: string;
+  password?: string;
+  sessionId?: string;
+};
 
 export type LoginRequest = {
-  contact: string;
-  password: string;
+  provider: ProviderType;
+  metaData: OAuthMetaData;
 };
 
 export enum TokenTypes {
@@ -36,7 +46,7 @@ export interface LoginResponse extends BaseResponseWithData<{
 
 
 export type RegisterRequest = {
-  contact: string;
+  email: string;
   password: string;
   firstName: string;
   lastName: string;
@@ -55,3 +65,9 @@ export interface RefreshTokenResponse extends BaseResponseWithData<{
   tokens : Tokens
 } | null> {}
 
+
+export type SessionStatusRequest = {
+  sessionId: string;
+};
+
+export interface SessionResponse extends BaseResponseWithData<ISession> {}
